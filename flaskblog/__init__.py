@@ -16,4 +16,6 @@ login_manager = LoginManager(app) #instance of login manager
 login_manager.login_view = 'login' #the function name (route) of the page to navigate to, if a user is not logged in and lands on a page that requires login.
 login_manager.login_message_category = 'info' # set the category (css) of the info flash message
 
-from flaskblog import routes #done after creating app object to avoid circular importing
+#routes must be imported into init otherwise pages cannot be accesed
+#done after creating app object to avoid circular importing
+from flaskblog import routes 
