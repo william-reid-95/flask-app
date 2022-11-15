@@ -1,33 +1,19 @@
 from distutils import extension
 from email.mime import image
 from fileinput import filename
-from flask import render_template, url_for, flash, redirect, request
+from flask import render_template, url_for, flash, redirect, request, abort
 from flaskblog import app, db, bcrypt
-from flaskblog.forms import RegistrationForm, LoginForm, UpdateAccountForm
+from flaskblog.forms import RegistrationForm, LoginForm, UpdateAccountForm, PostForm
 from flaskblog.models import User,Post
 from flask_login import login_user, current_user, logout_user, login_required
 import secrets
 import os
 from PIL import Image
 
-posts = [
-    {
-    "author":"Bob Fred",
-    "title":"Blog Post 1",
-    "content":"first post content",
-    "date_posted":"April 1, 2020"
-    },
-    {
-    "author":"Jane Doe",
-    "title":"Blog Post 2",
-    "content":"second post content",
-    "date_posted":"July 22, 2022"
-    }
-]
-
 @app.route("/")
 @app.route("/home")
 def home():
+    posts = Post.query.all() #from the Post db, return everything
     return render_template('home.html', posts=posts) #render templates must be stored in a folder called 'templates'
 
 @app.route("/about")
@@ -113,3 +99,53 @@ def account():
 
     image_file = url_for('static', filename='profile_pics/' + current_user.image_file)
     return render_template('account.html', title='Account', image_file=image_file, form=form)
+
+@app.route("/post/new",methods=["GET","POST"]) #routes with a form will need to accept POST requests
+@login_required
+def new_post():
+    form = PostForm()
+    if form.validate_on_submit():
+        post = Post(title=form.title.data, content=form.content.data, author=current_user) #create a new database instance of a post (class declared in models.py)
+        db.session.add(post) 
+        db.session.commit()
+        flash('Your post has been created!', 'success')
+        return redirect(url_for('home'))
+    return render_template('create_post.html', title ='New Post', form=form, legend='Update Post')
+
+@app.route("/post/<int:post_id>")
+def post(post_id):
+    post = Post.query.get_or_404(post_id)
+    return render_template('post.html', title=post.title, post=post)
+
+@app.route("/post/<int:post_id>/update", methods=["GET","POST"])
+@login_required
+def update_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    if post.author != current_user:
+        abort(403)
+    
+    form = PostForm()
+    if form.validate_on_submit():
+        post.title = form.title.data
+        post.content = form.content.data
+        db.session.commit() #a new db entry is not needed, just need to update existing db entry
+        flash('Your post has been updated!', 'success')
+        return redirect(url_for('post',post_id=post.id))
+    elif request.method == 'GET': #is user is loading page, populate fields
+        form.title.data = post.title #prefil form with previous post's data
+        form.content.data = post.content
+
+    return render_template('create_post.html', title='Update Post',form=form, legend='Update Post')
+
+
+#this route does not return a temmplate (html page), it is just the logic for handling post deletion, once post is removed it will redirect user to home.
+@app.route("/post/<int:post_id>/delete", methods=["POST"])
+@login_required
+def delete_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    if post.author != current_user:
+        abort(403)
+    db.session.delete(post)
+    db.session.commit()
+    flash('Post deleted!', 'success')
+    return redirect(url_for('home'))
